@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+.streamlit/secrets.toml
+.env
+*.env
+
+data/combined_startup_dataset.csv
+models.pkl
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+*.log
+*.tmp
