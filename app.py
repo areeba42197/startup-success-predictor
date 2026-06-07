@@ -631,7 +631,7 @@ with st.sidebar:
 # ─────────────────────── Load / Train Model ──────────────────────────
 @st.cache_resource(show_spinner=False)
 def get_trained_models():
-    """Train from the uploaded Crunchbase dataset plus Pakistan augmentation."""
+    """Load cached models when available; otherwise train once from the dataset."""
     data_dir = os.path.join(os.path.dirname(__file__), "data")
     combined_path = os.path.join(data_dir, "combined_startup_dataset.csv")
     combined, training_df = build_combined_startup_dataset(
@@ -644,7 +644,19 @@ def get_trained_models():
     X = processed[FEATURE_COLS].values
     y = processed["target"].values.astype(int)
 
-    trained, scaler, results, X_test, y_test = train_models(X, y)
+    cached = load_models()
+    if cached:
+        trained = cached["models"]
+        scaler = cached["scaler"]
+        results = cached["results"]
+        le_c = cached["le_country"]
+        le_r = cached["le_region"]
+        le_cat = cached["le_cat"]
+        X_test, y_test = X[:100], y[:100]
+    else:
+        trained, scaler, results, X_test, y_test = train_models(X, y)
+        save_models(trained, scaler, results, le_c, le_r, le_cat)
+
     return {"models": trained, "scaler": scaler, "results": results,
             "le_country": le_c, "le_region": le_r, "le_cat": le_cat,
             "df": combined, "df_processed": processed,
