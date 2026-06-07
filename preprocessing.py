@@ -5,9 +5,25 @@ Handles both the Crunchbase dataset and Pakistan startup augmentation.
 
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
 import warnings
 warnings.filterwarnings("ignore")
+
+try:
+    from sklearn.preprocessing import LabelEncoder
+except Exception:
+    class LabelEncoder:
+        """Small fallback encoder for Streamlit Cloud when sklearn is unavailable."""
+
+        def fit_transform(self, values):
+            cleaned = pd.Series(values).fillna("Unknown").astype(str)
+            self.classes_ = np.array(sorted(cleaned.unique()))
+            index = {value: idx for idx, value in enumerate(self.classes_)}
+            return cleaned.map(index).fillna(0).astype(int).to_numpy()
+
+        def transform(self, values):
+            cleaned = pd.Series(values).fillna("Unknown").astype(str)
+            index = {value: idx for idx, value in enumerate(self.classes_)}
+            return cleaned.map(index).fillna(0).astype(int).to_numpy()
 
 
 CATEGORY_MAP = {

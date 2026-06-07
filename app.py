@@ -11,13 +11,18 @@ sys.path.insert(0, os.path.dirname(__file__))
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.express as px
-from sklearn.metrics import ConfusionMatrixDisplay
 import io
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import ConfusionMatrixDisplay
+except Exception:
+    plt = None
+    ConfusionMatrixDisplay = None
 
 from preprocessing import preprocess, FEATURE_COLS, FEATURE_DISPLAY_NAMES
 from model import train_models, predict_single, save_models, load_models
@@ -920,8 +925,15 @@ elif page == "Predict Startup":
 
         with st.expander("View technical SHAP chart"):
             fig_shap = plot_shap_bar(shap_vals, feat_names)
-            st.pyplot(fig_shap, use_container_width=True)
-            plt.close()
+            if fig_shap is not None:
+                st.pyplot(fig_shap, use_container_width=True)
+                plt.close()
+            else:
+                st.dataframe(
+                    pd.DataFrame({"Feature": feat_names, "Impact": shap_vals}),
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
         with st.expander("View LIME local explanation"):
             st.caption("LIME explains this single prediction by testing small changes around the startup profile.")
@@ -1321,13 +1333,19 @@ elif page == "Model Performance":
         for mname, r in results.items():
             st.markdown(f"#### {mname}")
             cm = r["cm"]
-            fig_cm, ax = plt.subplots(figsize=(4, 3.5))
-            disp = ConfusionMatrixDisplay(confusion_matrix=cm,
-                                           display_labels=["Failure", "Success"])
-            disp.plot(ax=ax, colorbar=False, cmap="Blues")
-            ax.set_title(f"{mname} — Confusion Matrix")
-            st.pyplot(fig_cm, use_container_width=False)
-            plt.close()
+            if plt is not None and ConfusionMatrixDisplay is not None:
+                fig_cm, ax = plt.subplots(figsize=(4, 3.5))
+                disp = ConfusionMatrixDisplay(confusion_matrix=cm,
+                                               display_labels=["Failure", "Success"])
+                disp.plot(ax=ax, colorbar=False, cmap="Blues")
+                ax.set_title(f"{mname} — Confusion Matrix")
+                st.pyplot(fig_cm, use_container_width=False)
+                plt.close()
+            else:
+                st.dataframe(
+                    pd.DataFrame(cm, index=["Actual Failure", "Actual Success"], columns=["Predicted Failure", "Predicted Success"]),
+                    use_container_width=True,
+                )
 
     with tab_overfit:
         overfit_rows = []
