@@ -6,6 +6,7 @@ Generates feature importance, local explanations, and plots.
 import numpy as np
 import pandas as pd
 import shap
+from lime.lime_tabular import LimeTabularExplainer
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -62,6 +63,38 @@ def plot_shap_bar(shap_values, feature_names=None):
     fig.patch.set_facecolor("#F8F9FA")
     plt.tight_layout()
     return fig
+
+
+def get_lime_explanation(model, X_background, X_input, feature_names, model_name="XGBoost", scaler=None):
+    """Return LIME local feature weights for one startup prediction."""
+    explainer = LimeTabularExplainer(
+        training_data=np.asarray(X_background),
+        feature_names=feature_names,
+        class_names=["High Risk", "Success"],
+        mode="classification",
+        discretize_continuous=True,
+        random_state=42,
+    )
+
+    def predict_fn(samples):
+        if model_name == "Logistic Regression" and scaler is not None:
+            return model.predict_proba(scaler.transform(samples))
+        return model.predict_proba(samples)
+
+    explanation = explainer.explain_instance(
+        np.asarray(X_input)[0],
+        predict_fn,
+        num_features=min(8, len(feature_names)),
+        labels=(1,),
+    )
+    rows = []
+    for condition, weight in explanation.as_list(label=1):
+        rows.append({
+            "Feature condition": condition,
+            "Effect": "Supports success" if weight >= 0 else "Supports high risk",
+            "Weight": round(float(weight), 4),
+        })
+    return rows
 
 
 def get_feature_importance_text(shap_values, feature_names=None):

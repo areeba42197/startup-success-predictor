@@ -21,7 +21,8 @@ import io
 
 from preprocessing import preprocess, FEATURE_COLS, FEATURE_DISPLAY_NAMES
 from model import train_models, predict_single, save_models, load_models
-from xai import get_shap_explainer, get_shap_values_single, plot_shap_bar
+from xai import (get_shap_explainer, get_shap_values_single, plot_shap_bar,
+                 get_lime_explanation)
 from generative import (get_business_explanation, get_strategy_advice,
                          get_whatif_explanation, get_gamified_feedback)
 from currency import (format_currency, convert_to_usd, convert_from_usd,
@@ -415,6 +416,37 @@ def render_factor_table(rows):
     )
 
 
+def render_lime_table(rows):
+    if not rows:
+        st.caption("LIME did not find a strong local explanation for this prediction.")
+        return
+
+    body = []
+    for row in rows:
+        body.append(
+            "<tr>"
+            f"<td>{html.escape(str(row['Feature condition']))}</td>"
+            f"<td>{html.escape(str(row['Effect']))}</td>"
+            f"<td>{html.escape(str(row['Weight']))}</td>"
+            "</tr>"
+        )
+    st.markdown(
+        """
+        <table class="factor-table">
+          <thead>
+            <tr><th>Feature condition</th><th>Local effect</th><th>LIME weight</th></tr>
+          </thead>
+          <tbody>
+        """
+        + "".join(body)
+        + """
+          </tbody>
+        </table>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_model_table(rows):
     body = []
     for row in rows:
@@ -765,7 +797,7 @@ elif page == "Predict Startup":
         days_first_funding = st.slider("Days Until First Funding", 0, 1825, 365,
                                         help="How many days after founding did you get first funding?")
 
-        predict_btn = st.button("Run Prediction", type="primary", width="stretch")
+        predict_btn = st.button("Run Prediction", type="primary", use_container_width=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -811,7 +843,7 @@ elif page == "Predict Startup":
                 </div>""", unsafe_allow_html=True)
             st.plotly_chart(
                 create_probability_gauge(preview_prob, preview_label == 1, height=220),
-                width="stretch"
+                use_container_width=True
             )
             st.markdown(f"""
             <p><strong>{html.escape(startup_name or 'Your Startup')}</strong></p>
@@ -858,6 +890,9 @@ elif page == "Predict Startup":
             shap_vals = get_shap_values_single(explainer, X_input, model_choice)
             feat_names = [FEATURE_DISPLAY_NAMES.get(f, f) for f in FEATURE_COLS]
             positive_df, risk_df, pos_txt, neg_txt = build_factor_tables(shap_vals, feat_names)
+            lime_rows = get_lime_explanation(
+                model_for_shap, X_bg, X_input, feat_names, model_choice, scaler
+            )
 
         st.markdown('<div class="result-section">', unsafe_allow_html=True)
         st.subheader("Business Factors Behind the Prediction")
@@ -873,8 +908,12 @@ elif page == "Predict Startup":
 
         with st.expander("View technical SHAP chart"):
             fig_shap = plot_shap_bar(shap_vals, feat_names)
-            st.pyplot(fig_shap, width="stretch")
+            st.pyplot(fig_shap, use_container_width=True)
             plt.close()
+
+        with st.expander("View LIME local explanation"):
+            st.caption("LIME explains this single prediction by testing small changes around the startup profile.")
+            render_lime_table(lime_rows)
 
         with st.spinner("Generating Groq business analysis..."):
             startup_info = {
@@ -975,7 +1014,7 @@ elif page == "What-If Analysis":
                              yaxis_title="Success Probability (%)",
                              yaxis=dict(range=[0, 100]),
                              height=380)
-        st.plotly_chart(fig_f, width="stretch")
+        st.plotly_chart(fig_f, use_container_width=True)
 
         # What-if slider
         new_fund_local = st.slider(f"Try a funding amount ({CURR})",
@@ -1009,7 +1048,7 @@ elif page == "What-If Analysis":
                              xaxis_title="Number of Funding Rounds",
                              yaxis_title="Success Probability (%)",
                              yaxis=dict(range=[0, 100]), height=380)
-        st.plotly_chart(fig_r, width="stretch")
+        st.plotly_chart(fig_r, use_container_width=True)
 
     with tab3:
         countries_compare = ["PAK", "USA", "GBR", "IND", "ARE", "DEU", "SGP", "CAN", "AUS", "FRA"]
@@ -1034,7 +1073,7 @@ elif page == "What-If Analysis":
         fig_c.update_layout(title="Success Probability by Country (same startup profile)",
                              yaxis_title="Success Probability (%)",
                              yaxis=dict(range=[0, 100]), height=380)
-        st.plotly_chart(fig_c, width="stretch")
+        st.plotly_chart(fig_c, use_container_width=True)
         st.caption("Pakistan data has been specifically incorporated into training, so predictions include local ecosystem signals.")
 
 
@@ -1125,7 +1164,7 @@ elif page == "Startup Challenge":
         st.warning(f"Allocation sums to {total_pct}%. Adjust sliders to reach 100%.")
 
     play_btn = st.button("Play Round", type="primary",
-                          width="stretch", disabled=(total_pct != 100))
+                          use_container_width=True, disabled=(total_pct != 100))
 
     if play_btn and total_pct == 100:
         with st.spinner("Simulating outcome..."):
@@ -1168,7 +1207,7 @@ elif page == "Startup Challenge":
             marker_colors=["#2A9D8F", "#E9C46A", "#F4A261", "#E76F51", "#264653"]
         ))
         fig_pie.update_layout(title=f"Budget Allocation - {budget_display}", height=320)
-        st.plotly_chart(fig_pie, width="stretch")
+        st.plotly_chart(fig_pie, use_container_width=True)
 
         st.markdown("**AI Coach Feedback:**")
         render_text_box(feedback)
@@ -1209,7 +1248,7 @@ elif page == "Model Performance":
                 "Threshold": f"{r['threshold']:.2f}",
             })
         df_metrics = pd.DataFrame(metric_rows)
-        st.dataframe(df_metrics, width="stretch", hide_index=True)
+        st.dataframe(df_metrics, use_container_width=True, hide_index=True)
         st.warning(
             "Plain accuracy can look high because most records are labeled as success. "
             "Use Balanced Accuracy, Failure Recall, ROC-AUC, and MCC to judge whether the model is truly useful."
@@ -1231,7 +1270,7 @@ elif page == "Model Performance":
             ))
         fig_bar.update_layout(barmode="group", title="All Models - Metric Comparison",
                                yaxis=dict(range=[0, 1.05]), height=420)
-        st.plotly_chart(fig_bar, width="stretch")
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     with tab_roc:
         st.markdown("""
@@ -1250,7 +1289,7 @@ elif page == "Model Performance":
         fig_auc.update_layout(title="ROC-AUC Score by Model",
                                yaxis=dict(range=[0.5, 1.0]),
                                height=380)
-        st.plotly_chart(fig_auc, width="stretch")
+        st.plotly_chart(fig_auc, use_container_width=True)
         st.caption("Because the dataset is imbalanced, use balanced accuracy and failure recall with ROC-AUC before trusting plain accuracy.")
 
         pr_vals = {name: results[name]["pr_auc"] for name in results}
@@ -1264,7 +1303,7 @@ elif page == "Model Performance":
         fig_pr.update_layout(title="Precision-Recall AUC by Model",
                              yaxis=dict(range=[0.5, 1.0]),
                              height=380)
-        st.plotly_chart(fig_pr, width="stretch")
+        st.plotly_chart(fig_pr, use_container_width=True)
 
     with tab_cm:
         for mname, r in results.items():
@@ -1275,7 +1314,7 @@ elif page == "Model Performance":
                                            display_labels=["Failure", "Success"])
             disp.plot(ax=ax, colorbar=False, cmap="Blues")
             ax.set_title(f"{mname} — Confusion Matrix")
-            st.pyplot(fig_cm, width="content")
+            st.pyplot(fig_cm, use_container_width=False)
             plt.close()
 
     with tab_overfit:
@@ -1290,7 +1329,7 @@ elif page == "Model Performance":
                 "Gap": f"{gap*100:.2f}%",
                 "Overfitting Risk": risk,
             })
-        st.dataframe(pd.DataFrame(overfit_rows), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(overfit_rows), use_container_width=True, hide_index=True)
 
         fig_gap = go.Figure()
         fig_gap.add_trace(go.Bar(
@@ -1305,7 +1344,7 @@ elif page == "Model Performance":
             yaxis_title="Gap in percentage points",
             height=360,
         )
-        st.plotly_chart(fig_gap, width="stretch")
+        st.plotly_chart(fig_gap, use_container_width=True)
         st.caption("A small train-test gap suggests the model is generalizing instead of memorizing the training data.")
 
     st.markdown("---")
@@ -1372,7 +1411,7 @@ elif page == "Pakistan Startups":
         height=660,
         margin=dict(l=160)
     )
-    st.plotly_chart(fig_pak, width="stretch")
+    st.plotly_chart(fig_pak, use_container_width=True)
 
     chart_col1, chart_col2 = st.columns(2, gap="large")
     with chart_col1:
@@ -1392,7 +1431,7 @@ elif page == "Pakistan Startups":
             height=420,
             margin=dict(l=130),
         )
-        st.plotly_chart(fig_sector, width="stretch")
+        st.plotly_chart(fig_sector, use_container_width=True)
 
     with chart_col2:
         st.subheader("Model Dataset by City")
@@ -1405,7 +1444,7 @@ elif page == "Pakistan Startups":
             color_discrete_sequence=["#7C3AED", "#06B6D4", "#22C55E", "#EAB308", "#F97316", "#EC4899"],
         )
         fig_city.update_layout(height=420)
-        st.plotly_chart(fig_city, width="stretch")
+        st.plotly_chart(fig_city, use_container_width=True)
 
     trend_df = pak_model_df[
         (pak_model_df["founded_year"] >= 2006) & (pak_model_df["founded_year"] <= 2025)
@@ -1424,7 +1463,7 @@ elif page == "Pakistan Startups":
         yaxis_title="Startup records",
         height=380,
     )
-    st.plotly_chart(fig_trend, width="stretch")
+    st.plotly_chart(fig_trend, use_container_width=True)
 
     st.subheader("Verified Pakistan Startup Directory")
     display_cols = ["name", "category_list", "city", "status_label", "funding_rounds", "funding_display"]
@@ -1433,7 +1472,7 @@ elif page == "Pakistan Startups":
         "city": "City", "status_label": "Status",
         "funding_rounds": "Rounds", "funding_display": f"Funding ({CURR})"
     })
-    st.dataframe(display_df, width="stretch", hide_index=True)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     st.markdown("---")
     st.info(f"""

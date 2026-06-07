@@ -39,10 +39,18 @@ def default_crunchbase_zip_path() -> str:
     return os.path.abspath(os.path.join(project_dir, "..", "crunchbase dataset.zip"))
 
 
+def default_combined_csv_path() -> str:
+    project_dir = os.path.dirname(__file__)
+    return os.path.join(project_dir, "data", "combined_startup_dataset.csv")
+
+
 def load_crunchbase_dataset(zip_path: str | None = None) -> pd.DataFrame:
     """Load the Kaggle Crunchbase CSV from the uploaded zip file."""
     zip_path = zip_path or default_crunchbase_zip_path()
     if not os.path.exists(zip_path):
+        fallback_csv = default_combined_csv_path()
+        if os.path.exists(fallback_csv):
+            return normalize_startup_schema(pd.read_csv(fallback_csv))
         raise FileNotFoundError(f"Crunchbase dataset zip not found: {zip_path}")
 
     with zipfile.ZipFile(zip_path) as zf:
@@ -181,6 +189,13 @@ def build_combined_startup_dataset(
     save_path: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return combined full dataset and the supervised training subset."""
+    source_zip = zip_path or default_crunchbase_zip_path()
+    fallback_csv = save_path or default_combined_csv_path()
+    if not os.path.exists(source_zip) and os.path.exists(fallback_csv):
+        combined = normalize_startup_schema(pd.read_csv(fallback_csv))
+        supervised = combined[combined["status"].isin(["operating", "acquired", "ipo", "closed"])].copy()
+        return combined, supervised
+
     crunchbase = load_crunchbase_dataset(zip_path)
     verified_pakistan = normalize_startup_schema(get_pakistan_df())
     verified_failures = normalize_startup_schema(get_failed_startups_df())
